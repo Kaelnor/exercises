@@ -7,7 +7,7 @@
       flake = false;
     };
     flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-22.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
   };
 
   outputs = { self, flake-utils, nixpkgs, ... }:
@@ -23,9 +23,9 @@
       {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
-            haskell.compiler.ghc925
+            haskell.compiler.ghc92
             cabal-install
-            haskell-language-server
+            (haskell-language-server.override { supportedGhcVersions = [ "92" ]; })
             hlint
             ormolu
           ] ++ darwinBuildInputs;
