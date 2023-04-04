@@ -44,10 +44,10 @@ makeSnippet limit text = take limit ("Description: " ++ text) ++ "..."
 -- their squares.
 --
 -- >>> sumOfSquares 3 4
--- NOW 25
+-- 25
 --
 -- >>> sumOfSquares (-2) 7
--- NOW 53
+-- 53
 --
 -- Explanation: @sumOfSquares 3 4@ should be equal to @9 + 16@ and this
 -- is 25.
@@ -74,7 +74,6 @@ lastDigit n = mod (abs n) 10
 --
 -- >>> minmax 7 1 4
 -- 6
--- 6
 --
 -- Explanation: @minmax 7 1 4@ returns 6 because 7 is the biggest number
 -- and 1 is the smallest, and 7 - 1 = 6.
@@ -91,7 +90,6 @@ minmax x y z =
 -- the end (including).
 --
 -- >>> subString 3 7 "Hello, world!"
--- "lo, w"
 -- "lo, w"
 --
 -- >>> subString 10 5 "Some very long String"
@@ -113,7 +111,6 @@ subString start end str
 --
 -- >>> strSum "100    -42  15"
 -- 73
--- 73
 --
 -- The string contains only spaces and/or numbers.
 strSum :: String -> Integer
@@ -124,7 +121,6 @@ strSum str = sum $ map read $ words str
 -- greater than the given number and strictly lower.
 --
 -- >>> lowerAndGreater 3 [1 .. 9]
--- "3 is greater than 2 elements and lower than 6 elements"
 -- "3 is greater than 2 elements and lower than 6 elements"
 --
 -- Explanation: the list [1 .. 9] contains 9 elements: [1, 2, 3, 4, 5, 6, 7, 8, 9]
