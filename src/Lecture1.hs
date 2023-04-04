@@ -54,7 +54,9 @@ makeSnippet limit text = take limit ("Description: " ++ text) ++ "..."
 
 -- DON'T FORGET TO SPECIFY THE TYPE IN HERE
 sumOfSquares :: Integer -> Integer -> Integer
-sumOfSquares x y = x ^ 2 + y ^ 2
+-- We could use (^ 2) but GHC emits a warning because of the polymorphism
+-- of the ^ operator and number literals.
+sumOfSquares x y = x * x + y * y
 
 -- | Implement a function that returns the last digit of a given number.
 --
@@ -67,7 +69,7 @@ sumOfSquares x y = x ^ 2 + y ^ 2
 
 -- DON'T FORGET TO SPECIFY THE TYPE IN HERE
 lastDigit :: Integer -> Integer
-lastDigit n = mod (abs n) 10
+lastDigit n = abs n `mod` 10
 
 -- | Write a function that takes three numbers and returns the
 -- difference between the biggest number and the smallest one.
@@ -129,11 +131,11 @@ strSum str = sum $ map read $ words str
 --
 -- 🕯 HINT: Use recursion to implement this function.
 lowerAndGreater :: Integer -> [Integer] -> String
-lowerAndGreater n list = go 0 0 n list
+lowerAndGreater n list = go 0 0 list
   where
-    go :: Integer -> Integer -> Integer -> [Integer] -> String
-    go lower greater n list
-      | null list = show n ++ " is greater than " ++ show greater ++ " elements and lower than " ++ show lower ++ " elements"
-      | n > head list = go lower (greater + 1) n $ tail list
-      | n < head list = go (lower + 1) greater n $ tail list
-      | otherwise = go lower greater n $ tail list
+    go :: Integer -> Integer -> [Integer] -> String
+    go lower greater l
+      | null l = show n ++ " is greater than " ++ show greater ++ " elements and lower than " ++ show lower ++ " elements"
+      | n > head l = go lower (greater + 1) $ tail l
+      | n < head l = go (lower + 1) greater $ tail l
+      | otherwise = go lower greater $ tail l
