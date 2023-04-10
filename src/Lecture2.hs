@@ -39,6 +39,7 @@ where
 
 -- VVV If you need to import libraries, do it after this line ... VVV
 import Data.Char (isSpace)
+import Data.List (singleton)
 
 -- ^ ^^ and before this line. Otherwise the test suite might fail  ^^^
 
@@ -85,9 +86,9 @@ removeAt n l
   | n < 0 = (Nothing, l)
   | otherwise =
       let (xs, ys) = splitAt n l
-       in case (xs, ys) of
-            (_, []) -> (Nothing, l) -- Either l is empty or n >= length l
-            (_, w : ws) -> (Just w, xs ++ ws) -- n is a valid index
+       in case ys of
+            [] -> (Nothing, l) -- Either l is empty or n >= length l
+            w : ws -> (Just w, xs ++ ws) -- n is a valid index
 
 -- | Write a function that takes a list of lists and returns only
 -- lists of even lengths.
@@ -251,11 +252,28 @@ calculateRewardExp d = case d of
   BlackDragon {} -> 150
   GreenDragon {} -> 250
 
+calculateRewardTreasure :: Dragon a -> (Gold, Treasure a)
+calculateRewardTreasure d = case d of
+  RedDragon _ chest -> (chestGold chest, chestTreasure chest)
+  BlackDragon _ chest -> (chestGold chest, chestTreasure chest)
+  GreenDragon _ gold -> (gold, NoTreasure)
+
 calculateReward :: Dragon a -> Reward a
-calculateReward d = case d of
-  GreenDragon _ gold -> Reward {rewardExp = calculateRewardExp d, rewardGold = gold, rewardTreasure = NoTreasure}
-  BlackDragon _ chest -> Reward {rewardExp = calculateRewardExp d, rewardGold = chestGold chest, rewardTreasure = chestTreasure chest}
-  RedDragon _ chest -> Reward {rewardExp = calculateRewardExp d, rewardGold = chestGold chest, rewardTreasure = chestTreasure chest}
+calculateReward d =
+  let (gold, treasure) = calculateRewardTreasure d
+   in Reward
+        { rewardExp = calculateRewardExp d,
+          rewardGold = gold,
+          rewardTreasure = treasure
+        }
+
+-- NOTE: Otherwise, we can use RecordWildCards in this situation
+-- https://kodimensional.dev/recordwildcards
+--
+-- calculateReward :: Dragon a -> Reward a
+-- calculateReward d =
+--     let (rewardGold, rewardTeasure) = calculateRewardTreasure d in
+--     Reward { rewardExp = calculateRewardExp d, .. }
 
 calculateDamage :: Attack -> Health -> Health
 calculateDamage (Attack atk) (Health hp) = Health (hp - atk)
@@ -308,7 +326,7 @@ previous ones. Difficulty is a relative concept.
 isIncreasing :: [Int] -> Bool
 isIncreasing [] = True
 isIncreasing [_] = True
-isIncreasing [x, y] = x <= y
+isIncreasing [x, y] = x <= y -- Redundant but maybe useful performance wise
 isIncreasing (x : y : ys) = x <= y && isIncreasing (y : ys)
 
 -- | Implement a function that takes two lists, sorted in the
@@ -324,7 +342,8 @@ merge :: [Int] -> [Int] -> [Int]
 merge xs [] = xs
 merge [] ys = ys
 merge (x : xs) (y : ys)
-  | x <= y = x : merge xs (y : ys)
+  | x == y = x : y : merge xs ys
+  | x < y = x : merge xs (y : ys)
   | otherwise = y : merge (x : xs) ys
 
 -- | Implement the "Merge Sort" algorithm in Haskell. The @mergeSort@
@@ -341,11 +360,37 @@ merge (x : xs) (y : ys)
 -- >>> mergeSort [3, 1, 2]
 -- [1,2,3]
 mergeSort :: [Int] -> [Int]
-mergeSort [] = []
-mergeSort [x] = [x]
-mergeSort l =
-  let (firstHalf, secondHalf) = splitAt (length l `div` 2) l
-   in merge (mergeSort firstHalf) (mergeSort secondHalf)
+mergeSort = mergeSortSingletons
+
+-- mergeSort = mergeSortEvenOdd
+
+-- Solution 1 : Instead of using length to split the list in the middle,
+-- we can split by index.
+splitByEvenOddIndex :: [a] -> ([a], [a])
+splitByEvenOddIndex [] = ([], [])
+splitByEvenOddIndex [x] = ([x], [])
+splitByEvenOddIndex (x : y : zs) = (x : xs, y : ys)
+  where
+    (xs, ys) = splitByEvenOddIndex zs
+
+mergeSortEvenOdd :: [Int] -> [Int]
+mergeSortEvenOdd [] = []
+mergeSortEvenOdd [x] = [x]
+mergeSortEvenOdd l = merge (mergeSortEvenOdd evenl) (mergeSortEvenOdd oddl)
+  where
+    (evenl, oddl) = splitByEvenOddIndex l
+
+-- Solution 2 : Alternatively, we can split every element in a singleton list
+-- and merge 2 by 2
+mergeSortSingletons :: [Int] -> [Int]
+mergeSortSingletons [] = []
+mergeSortSingletons [x] = [x]
+mergeSortSingletons l = mergeSortConcat (map singleton l)
+  where
+    mergeSortConcat :: [[Int]] -> [Int]
+    mergeSortConcat [] = []
+    mergeSortConcat [x] = x
+    mergeSortConcat (x : y : zs) = mergeSortConcat (merge x y : zs)
 
 -- | Haskell is famous for being a superb language for implementing
 -- compilers and interpreters to other programming languages. In the next
@@ -423,7 +468,11 @@ eval vs (Add e1 e2) = case (eval vs e1, eval vs e2) of
 -- Write a function that takes and expression and performs "Constant
 -- Folding" optimization on the given expression.
 constantFolding :: Expr -> Expr
-constantFolding e = case e of
+constantFolding = recomposeExpr . decomposeExpr
+
+-- Pattern Matching version
+constantFoldingPattern :: Expr -> Expr
+constantFoldingPattern e = case e of
   Lit i -> Lit i
   Var x -> Var x
   Add (Lit i) (Lit j) -> Lit (i + j)
@@ -446,3 +495,20 @@ constantFolding e = case e of
   Add (Add (Lit i) e1) (Add e2 (Lit j)) -> constantFolding (Add (Add e1 e2) (Lit (i + j)))
   Add (Add e1 (Lit i)) (Add (Lit j) e2) -> constantFolding (Add (Add e1 e2) (Lit (i + j)))
   Add e1 e2 -> Add (constantFolding e1) (constantFolding e2)
+
+-- Decomposition version
+-- Decompose an expression in a list of its vars and the sum of its literals
+decomposeExpr :: Expr -> ([String], Int)
+decomposeExpr (Lit i) = ([], i)
+decomposeExpr (Var x) = ([x], 0)
+decomposeExpr (Add e1 e2) = (vars1 ++ vars2, i1 + i2)
+  where
+    (vars1, i1) = decomposeExpr e1
+    (vars2, i2) = decomposeExpr e2
+
+recomposeExpr :: ([String], Int) -> Expr
+recomposeExpr ([], i) = Lit i
+recomposeExpr ([x], 0) = Var x
+recomposeExpr ([x], i) = Add (Lit i) (Var x)
+recomposeExpr (x : xs, 0) = Add (Var x) (recomposeExpr (xs, 0))
+recomposeExpr (x : xs, i) = Add (Lit i) (Add (Var x) (recomposeExpr (xs, 0)))
