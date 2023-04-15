@@ -341,10 +341,10 @@ isIncreasing (x : y : ys) = x <= y && isIncreasing (y : ys)
 merge :: [Int] -> [Int] -> [Int]
 merge xs [] = xs
 merge [] ys = ys
-merge (x : xs) (y : ys)
-  | x == y = x : y : merge xs ys
-  | x < y = x : merge xs (y : ys)
-  | otherwise = y : merge (x : xs) ys
+merge (x : xs) (y : ys) = case compare x y of
+  EQ -> x : y : merge xs ys
+  LT -> x : merge xs (y : ys)
+  GT -> y : merge (x : xs) ys
 
 -- | Implement the "Merge Sort" algorithm in Haskell. The @mergeSort@
 -- function takes a list of numbers and returns a new list containing the
@@ -380,17 +380,23 @@ mergeSortEvenOdd l = merge (mergeSortEvenOdd evenl) (mergeSortEvenOdd oddl)
   where
     (evenl, oddl) = splitByEvenOddIndex l
 
--- Solution 2 : Alternatively, we can split every element in a singleton list
--- and merge 2 by 2
+-- Solution 2 : Alternatively, we can split every element in a singletons list
+-- and merge 2 by 2.
+-- The 2 first cases are redundant and are covered by mergeSortConcat
+-- but we keep them as a little optimization.
+-- For the general case, we know that mergeSortConcat can only output
+-- an empty list or a singleton after all merges.
+-- However, it is easier to just concat the result to cover all
+-- potential cases and make GHC happy.
 mergeSortSingletons :: [Int] -> [Int]
 mergeSortSingletons [] = []
 mergeSortSingletons [x] = [x]
-mergeSortSingletons l = mergeSortConcat (map singleton l)
+mergeSortSingletons l = concat (mergeSortConcat (map singleton l))
   where
-    mergeSortConcat :: [[Int]] -> [Int]
+    mergeSortConcat :: [[Int]] -> [[Int]]
     mergeSortConcat [] = []
-    mergeSortConcat [x] = x
-    mergeSortConcat (x : y : zs) = mergeSortConcat (merge x y : zs)
+    mergeSortConcat [x] = [x]
+    mergeSortConcat (x : y : zs) = mergeSortConcat (merge x y : mergeSortConcat zs)
 
 -- | Haskell is famous for being a superb language for implementing
 -- compilers and interpreters to other programming languages. In the next
