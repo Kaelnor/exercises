@@ -31,7 +31,7 @@ module Lecture3
 where
 
 -- VVV If you need to import libraries, do it after this line ... VVV
-import Data.Foldable (fold)
+-- import Data.Foldable (fold)
 import Data.List (nub)
 
 -- ^ ^^ and before this line. Otherwise the test suite might fail  ^^^
@@ -103,15 +103,17 @@ have a lawful 'Monoid' instance.
 
 -- NOTE (Student) It is easier to derive num as Gold behaves like a
 -- simple Int anyway
+-- NOTE Dmitrii: In this case yes, but generally deriving Num for Gold
+-- doesn't make sense because there's no such things as gold multiplication.
+-- Num has too many methods and is generally considered a flawed abstraction.
 newtype Gold = Gold
   { unGold :: Int
   }
-  deriving (Show, Eq, Num)
+  deriving (Show, Eq)
 
 -- | Addition of gold coins.
 instance Semigroup Gold where
   (<>) :: Gold -> Gold -> Gold
-  -- Could just be x + y but writing the full version for the exercise
   (<>) x y = Gold {unGold = unGold x + unGold y}
 
 instance Monoid Gold where
@@ -133,7 +135,7 @@ instance Semigroup Reward where
   (<>) :: Reward -> Reward -> Reward
   (<>) r1 r2 =
     Reward
-      { rewardGold = rewardGold r1 + rewardGold r2,
+      { rewardGold = rewardGold r1 <> rewardGold r2,
         rewardSpecial = rewardSpecial r1 || rewardSpecial r2
       }
 
@@ -141,7 +143,7 @@ instance Monoid Reward where
   mempty :: Reward
   mempty =
     Reward
-      { rewardGold = 0,
+      { rewardGold = Gold 0,
         rewardSpecial = False
       }
 
@@ -197,8 +199,15 @@ instance Semigroup a => Monoid (Treasure a) where
 -- [1,2,3,4,5]
 -- >>> appendDiff3 (Product 2) (Product 3) (Product 3)
 -- Product {getProduct = 6}
-appendDiff3 :: (Monoid a, Eq a) => a -> a -> a -> a
-appendDiff3 x y z = fold (nub [x, y, z])
+
+-- appendDiff3 :: (Monoid a, Eq a) => a -> a -> a -> a
+-- appendDiff3 x y z = fold (nub [x, y, z])
+
+-- A less constrained version that works for List1.
+-- We can use foldr1 because nub always returns a non-empty list
+-- as we always have 3 args in this case.
+appendDiff3 :: (Semigroup a, Eq a) => a -> a -> a -> a
+appendDiff3 x y z = foldr1 (<>) (nub [x, y, z])
 
 {-
 
@@ -233,11 +242,9 @@ types that can have such an instance.
 
 instance Foldable List1 where
   foldr :: (a -> b -> b) -> b -> List1 a -> b
-  foldr f z (List1 x []) = f x z
   foldr f z (List1 x xs) = f x (foldr f z xs)
 
   foldMap :: Monoid m => (a -> m) -> List1 a -> m
-  foldMap f (List1 x []) = f x
   foldMap f (List1 x xs) = f x <> foldMap f xs
 
 instance Foldable Treasure where
@@ -265,7 +272,6 @@ types that can have such an instance.
 
 instance Functor List1 where
   fmap :: (a -> b) -> List1 a -> List1 b
-  fmap f (List1 x []) = List1 (f x) []
   fmap f (List1 x xs) = List1 (f x) (fmap f xs)
 
 instance Functor Treasure where
