@@ -1,4 +1,6 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE StrictData #-}
 
 -- |
 -- Module                  : Lecture4
@@ -101,10 +103,11 @@ module Lecture4
   )
 where
 
+import Data.Foldable (Foldable (foldl'))
 import Data.List.NonEmpty (NonEmpty (..), fromList)
-import qualified Data.List.NonEmpty as NE (map)
+-- import qualified Data.List.NonEmpty as NE (map)
 import Data.Maybe (mapMaybe)
-import Data.Semigroup (Max (..), Min (..), Semigroup (..), Sum (..))
+import Data.Semigroup (Max (..), Min (..), Sum (..))
 import System.Environment (getArgs)
 import Text.Read (readMaybe)
 
@@ -145,17 +148,16 @@ splitBy c s = case break (== c) s of
   (pref, "") -> [pref]
   (pref, _ : suff) -> pref : splitBy c suff
 
-parseRow' :: [String] -> Maybe Row
-parseRow' [prd, trd, cost] =
-  let trdMb = readMaybe trd :: Maybe TradeType
-      costMb = readMaybe cost :: Maybe Int
-   in case (trdMb, costMb) of
-        (Just trdStr, Just costStr) -> Just Row {rowProduct = prd, rowTradeType = trdStr, rowCost = costStr}
-        _ -> Nothing
-parseRow' _ = Nothing
-
 parseRow :: String -> Maybe Row
 parseRow = parseRow' . splitBy ','
+  where
+    parseRow' :: [String] -> Maybe Row
+    parseRow' [prd, trd, cost] =
+      do
+        trd' <- readMaybe trd
+        cost' <- readMaybe cost
+        pure Row {rowProduct = prd, rowTradeType = trd', rowCost = cost'}
+    parseRow' _ = Nothing
 
 {-
 We have almost all we need to calculate final stats in a simple and
@@ -223,6 +225,26 @@ instance Semigroup Stats where
         statsLongest = statsLongest s1 <> statsLongest s2
       }
 
+statsAppend' :: Stats -> Stats -> Stats
+statsAppend' s1 s2 =
+  Stats
+    { statsTotalPositions = statsTotalPositions s1 <> statsTotalPositions s2,
+      statsTotalSum = statsTotalSum s1 <> statsTotalSum s2,
+      statsAbsoluteMax = statsAbsoluteMax s1 <> statsAbsoluteMax s2,
+      statsAbsoluteMin = statsAbsoluteMin s1 <> statsAbsoluteMin s2,
+      statsSellMax = statsSellMax s1 `maybeAppend'` statsSellMax s2,
+      statsSellMin = statsSellMin s1 `maybeAppend'` statsSellMin s2,
+      statsBuyMax = statsBuyMax s1 `maybeAppend'` statsBuyMax s2,
+      statsBuyMin = statsBuyMin s1 `maybeAppend'` statsBuyMin s2,
+      statsLongest = statsLongest s1 <> statsLongest s2
+    }
+
+maybeAppend' :: Semigroup a => Maybe a -> Maybe a -> Maybe a
+maybeAppend' Nothing Nothing = Nothing
+maybeAppend' (Just !x) Nothing = Just x
+maybeAppend' Nothing (Just !x) = Just x
+maybeAppend' (Just !x) (Just !y) = Just (x <> y)
+
 {-
 The reason for having the 'Stats' data type is to be able to convert
 each row independently and then combine all stats into a single one.
@@ -287,7 +309,24 @@ implement the next task.
 -}
 
 combineRows :: NonEmpty Row -> Stats
-combineRows = sconcat . NE.map rowToStats
+-- combineRows = sconcat . NE.map rowToStats
+combineRows = foldl' rowStatsConcat defStats
+  where
+    defStats =
+      Stats
+        { statsTotalPositions = Sum 0,
+          statsTotalSum = Sum 0,
+          statsAbsoluteMax = Max 0,
+          statsAbsoluteMin = Min 0,
+          statsSellMax = Nothing,
+          statsSellMin = Nothing,
+          statsBuyMax = Nothing,
+          statsBuyMin = Nothing,
+          statsLongest = MaxLen ""
+        }
+
+    rowStatsConcat :: Stats -> Row -> Stats
+    rowStatsConcat s r = statsAppend' s (rowToStats r)
 
 {-
 After we've calculated stats for all rows, we can then pretty-print
@@ -461,5 +500,41 @@ You can expect the optimal lazy solution to run in ~20 minutes and
 consume ~200 MB of RAM. The numbers are not the best and there's lots
 of room for optimization! But at least you've managed to implement a
 streaming solution using only basic Haskell 🤗
+
+ NOTE: Final results on Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz
+
+❯ command time -v cabal run lecture4 -- test/gen/big.csv
+Total positions : 150000000
+Total final balance : 8400000000
+Biggest absolute cost : 150
+Smallest absolute cost : 0
+Max earning : 100
+Min earning : 1
+Max spending : 150
+Min spending : 7
+Longest product name : "Strawberry"
+	Command being timed: "cabal run lecture4 -- test/gen/big.csv"
+	User time (seconds): 754.36
+	System time (seconds): 47.22
+	Percent of CPU this job got: 109%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 12:14.96
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 44076
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 8088
+	Voluntary context switches: 16448163
+	Involuntary context switches: 75092
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 80
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
 
 -}
