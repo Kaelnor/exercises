@@ -104,8 +104,9 @@ module Lecture4
 where
 
 import Data.Foldable (Foldable (foldl'))
-import Data.List.NonEmpty (NonEmpty (..), fromList)
 -- import qualified Data.List.NonEmpty as NE (map)
+
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (mapMaybe)
 import Data.Semigroup (Max (..), Min (..), Sum (..))
 import System.Environment (getArgs)
@@ -152,11 +153,14 @@ parseRow :: String -> Maybe Row
 parseRow = parseRow' . splitBy ','
   where
     parseRow' :: [String] -> Maybe Row
+    parseRow' ["", _, _] = Nothing -- Ensure empty product name is not a valid row
     parseRow' [prd, trd, cost] =
       do
         trd' <- readMaybe trd
         cost' <- readMaybe cost
-        pure Row {rowProduct = prd, rowTradeType = trd', rowCost = cost'}
+        if cost' >= 0 -- Ensure cost is positive
+          then pure Row {rowProduct = prd, rowTradeType = trd', rowCost = cost'}
+          else Nothing
     parseRow' _ = Nothing
 
 {-
@@ -240,10 +244,9 @@ statsAppend' s1 s2 =
     }
 
 maybeAppend' :: Semigroup a => Maybe a -> Maybe a -> Maybe a
-maybeAppend' Nothing Nothing = Nothing
-maybeAppend' (Just !x) Nothing = Just x
-maybeAppend' Nothing (Just !x) = Just x
-maybeAppend' (Just !x) (Just !y) = Just (x <> y)
+maybeAppend' a b = case a <> b of
+  Nothing -> Nothing
+  Just !x -> Just x
 
 {-
 The reason for having the 'Stats' data type is to be able to convert
@@ -263,7 +266,7 @@ rowToStats r = case rowTradeType r of
   Buy ->
     Stats
       { statsTotalPositions = Sum 1,
-        statsTotalSum = Sum (rowCost r),
+        statsTotalSum = Sum (negate (rowCost r)), -- If we are buying, we are loosing money !
         statsAbsoluteMax = Max (rowCost r),
         statsAbsoluteMin = Min (rowCost r),
         statsSellMax = Nothing,
@@ -309,24 +312,10 @@ implement the next task.
 -}
 
 combineRows :: NonEmpty Row -> Stats
--- combineRows = sconcat . NE.map rowToStats
-combineRows = foldl' rowStatsConcat defStats
+combineRows (r :| rs) = foldl' rowStatsConcat (rowToStats r) rs
   where
-    defStats =
-      Stats
-        { statsTotalPositions = Sum 0,
-          statsTotalSum = Sum 0,
-          statsAbsoluteMax = Max 0,
-          statsAbsoluteMin = Min 0,
-          statsSellMax = Nothing,
-          statsSellMin = Nothing,
-          statsBuyMax = Nothing,
-          statsBuyMin = Nothing,
-          statsLongest = MaxLen ""
-        }
-
     rowStatsConcat :: Stats -> Row -> Stats
-    rowStatsConcat s r = statsAppend' s (rowToStats r)
+    rowStatsConcat s row = statsAppend' s (rowToStats row)
 
 {-
 After we've calculated stats for all rows, we can then pretty-print
@@ -346,25 +335,41 @@ you can return string "no value".
 -- Min spending           : 50
 -- Longest product name   : Pineapples
 displayStats :: Stats -> String
-displayStats s =
-  "Total positions : "
-    ++ show (getSum $ statsTotalPositions s)
-    ++ "\nTotal final balance : "
-    ++ show (getSum $ statsTotalSum s)
-    ++ "\nBiggest absolute cost : "
-    ++ show (getMax $ statsAbsoluteMax s)
-    ++ "\nSmallest absolute cost : "
-    ++ show (getMin $ statsAbsoluteMin s)
-    ++ "\nMax earning : "
-    ++ maybe "no value" (show . getMax) (statsSellMax s)
-    ++ "\nMin earning : "
-    ++ maybe "no value" (show . getMin) (statsSellMin s)
-    ++ "\nMax spending : "
-    ++ maybe "no value" (show . getMax) (statsBuyMax s)
-    ++ "\nMin spending : "
-    ++ maybe "no value" (show . getMin) (statsBuyMin s)
-    ++ "\nLongest product name : "
-    ++ show (unMaxLen $ statsLongest s)
+displayStats stats =
+  let labels =
+        [ "Total positions",
+          "Total final balance",
+          "Biggest absolute cost",
+          "Smallest absolute cost",
+          "Max earning",
+          "Min earning",
+          "Max spending",
+          "Min spending",
+          "Longest product name"
+        ]
+      values =
+        [ show (getSum $ statsTotalPositions stats),
+          show (getSum $ statsTotalSum stats),
+          show (getMax $ statsAbsoluteMax stats),
+          show (getMin $ statsAbsoluteMin stats),
+          maybe "no value" (show . getMax) (statsSellMax stats),
+          maybe "no value" (show . getMin) (statsSellMin stats),
+          maybe "no value" (show . getMax) (statsBuyMax stats),
+          maybe "no value" (show . getMin) (statsBuyMin stats),
+          unMaxLen (statsLongest stats)
+        ]
+   in unlines (zipWith (++) (pad labels) values)
+  where
+    pad :: [String] -> [String]
+    pad [] = []
+    pad l =
+      let maxlen = maximum (map length l)
+       in map (padLabelToLength maxlen) l
+
+    padLabelToLength :: Int -> String -> String
+    padLabelToLength i s
+      | i <= length s = s ++ " : "
+      | otherwise = s ++ replicate (i - length s) ' ' ++ " : "
 
 {-
 Now, we definitely have all the pieces in places! We can write a
@@ -386,7 +391,7 @@ the file doesn't have any products.
 calculateStats :: String -> String
 calculateStats s = case (mapMaybe parseRow . lines) s of
   [] -> "This file does not contain any product."
-  rows -> (displayStats . combineRows . fromList) rows
+  row : rows -> displayStats $ combineRows $ row :| rows
 
 {- The only thing left is to write a function with side-effects that
 takes a path to a file, reads its content, calculates stats and prints
@@ -503,38 +508,37 @@ streaming solution using only basic Haskell 🤗
 
  NOTE: Final results on Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz
 
-❯ command time -v cabal run lecture4 -- test/gen/big.csv
-Total positions : 150000000
-Total final balance : 8400000000
-Biggest absolute cost : 150
-Smallest absolute cost : 0
-Max earning : 100
-Min earning : 1
-Max spending : 150
-Min spending : 7
-Longest product name : "Strawberry"
+Total positions        : 150000000
+Total final balance    : -2737500000
+Biggest absolute cost  : 150
+Smallest absolute cost : 1
+Max earning            : 100
+Min earning            : 1
+Max spending           : 150
+Min spending           : 7
+Longest product name   : Strawberry
+
 	Command being timed: "cabal run lecture4 -- test/gen/big.csv"
-	User time (seconds): 754.36
-	System time (seconds): 47.22
+	User time (seconds): 676.99
+	System time (seconds): 39.28
 	Percent of CPU this job got: 109%
-	Elapsed (wall clock) time (h:mm:ss or m:ss): 12:14.96
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 10:54.47
 	Average shared text size (kbytes): 0
 	Average unshared data size (kbytes): 0
 	Average stack size (kbytes): 0
 	Average total size (kbytes): 0
-	Maximum resident set size (kbytes): 44076
+	Maximum resident set size (kbytes): 175612
 	Average resident set size (kbytes): 0
-	Major (requiring I/O) page faults: 0
-	Minor (reclaiming a frame) page faults: 8088
-	Voluntary context switches: 16448163
-	Involuntary context switches: 75092
+	Major (requiring I/O) page faults: 464
+	Minor (reclaiming a frame) page faults: 216720
+	Voluntary context switches: 16704747
+	Involuntary context switches: 62650
 	Swaps: 0
-	File system inputs: 0
-	File system outputs: 80
+	File system inputs: 138472
+	File system outputs: 12576
 	Socket messages sent: 0
 	Socket messages received: 0
 	Signals delivered: 0
 	Page size (bytes): 4096
 	Exit status: 0
-
 -}
